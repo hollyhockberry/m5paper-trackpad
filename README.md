@@ -4,7 +4,7 @@ BLE Trackpad Implementation Experiment with M5Paper.
 
 ## Installation
 
-    # git@github.com:hollyhockberry/m5paper-trackpad.git
+    # git clone git@github.com:hollyhockberry/m5paper-trackpad.git
     # cd m5paper-trackpad
     # pio run --target=upload
 
