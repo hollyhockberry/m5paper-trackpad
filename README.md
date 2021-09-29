@@ -10,8 +10,8 @@ BLE Trackpad Implementation Experiment with M5Paper.
 
 ## Specification
 
-* Tap and move with one finger to move the cursor.
-* Tap and move with two fingers for wheel (vertical and horizontal)
+* Swipe with one finger to move the cursor.
+* Swipe with two fingers for wheel (vertical and horizontal)
+* Swipe after short tap for drugging.
 * Short tap with one finger to click left.
 * Short tap with two finger to click right.
-  

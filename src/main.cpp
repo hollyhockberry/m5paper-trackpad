@@ -4,57 +4,105 @@
 
 #include <M5EPD.h>
 #include <BleMouse.h>
+#include <driver/adc.h>
 
-namespace {
+enum MODE {
+  NONE, SWIPE, TAP, DRUG, DTAP,
+};
 
 BleMouse bleMouse;
-int fingers = 0;
-int point[2] = {0};
-unsigned long pressed_time;
 
-bool isShortTap() {
-  return (::millis() - pressed_time) <= 200;
+bool down;
+MODE mode;
+
+int lastFingers;
+int pos[2] = {0};
+int eventIndex;
+u_long events[4];
+
+void pushTouchEvent(bool down) {
+  if (!down && (eventIndex <= 0)) {
+    return;
+  }
+  if (down && (eventIndex >= 4)) {
+    eventIndex = 0;
+  }
+  events[eventIndex++] = ::millis();
 }
-}  // namespace
+
+MODE judgeMode() {
+  if (eventIndex <= 0) {
+    return NONE;
+  }
+  const u_long now = ::millis();
+  const u_long last = events[eventIndex - 1];
+  if ((now - last) < 150) {
+    return NONE;
+  }
+  const MODE m = static_cast<MODE>(eventIndex);
+  eventIndex = 0;
+  return m;
+}
 
 void setup() {
   M5.begin();
   M5.TP.SetRotation(180);
+  // To avoid noise on GPIO36
+  ::adc_power_acquire();
   bleMouse.begin();
+
+  mode = NONE;
+  down = false;
+  eventIndex = 0;
+  lastFingers = 0;
 }
 
 void loop() {
   if (!M5.TP.avaliable()) {
-    return;
-  }
-
-  if (M5.TP.isFingerUp()) {
-    if (fingers != 0) {
-      if (isShortTap()) {
-        bleMouse.click(fingers == 1 ? MOUSE_LEFT : MOUSE_RIGHT);
-      }
-      fingers = 0;
-    }
-  } else {
-    const tp_finger_t item = M5.TP.readFinger(0);
-    if (fingers != M5.TP.getFingerNum()) {
-      if (fingers == 0) {
-        pressed_time = ::millis();
-      }
-      fingers = M5.TP.getFingerNum();
-    } else if (bleMouse.isConnected()) {
-      const int dx = item.x - point[0];
-      const int dy = item.y - point[1];
-      if (dx != 0 || dy != 0) {
-        if (fingers == 1) {
-          bleMouse.move(dx, dy, 0);
-        } else if (fingers == 2) {
-          bleMouse.move(0, 0, -dy/20, dx/20);
+    if (mode == NONE) {
+      mode = judgeMode();
+      if (bleMouse.isConnected()) {
+        if (mode == DRUG) {
+          bleMouse.press();
+        } else if (mode == TAP) {
+          bleMouse.click(lastFingers == 1 ? MOUSE_LEFT : MOUSE_RIGHT);
+          mode = NONE;
+        } else if (mode == DTAP) {
+          bleMouse.click();
+          bleMouse.click();
+          mode = NONE;
         }
       }
     }
-    point[0] = item.x;
-    point[1] = item.y;
+    return;
   }
+
   M5.TP.update();
+  if (!M5.TP.isFingerUp()) {
+    const tp_finger_t finger = M5.TP.readFinger(0);
+    lastFingers = M5.TP.getFingerNum();
+    if (!down) {
+      pushTouchEvent(true);
+      down = true;
+    } else if (bleMouse.isConnected()) {
+      const int dx = finger.x - pos[0];
+      const int dy = finger.y - pos[1];
+      if (dx != 0 && dy != 0) {
+        if (lastFingers == 1) {
+          bleMouse.move(dx, dy);
+        } else {
+          bleMouse.move(0, 0, -dy / 20, dx / 20);
+        }
+      }
+    }
+    pos[0] = finger.x;
+    pos[1] = finger.y;
+  } else if (down) {
+    pushTouchEvent(false);
+    mode = NONE;
+    down = false;
+    if (bleMouse.isConnected()) {
+      bleMouse.release();
+    }
+  }
 }
